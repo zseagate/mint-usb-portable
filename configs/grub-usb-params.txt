@@ -1,0 +1,6 @@
+# 追加到 /etc/default/grub 的 GRUB_CMDLINE_LINUX_DEFAULT
+# 作用：禁止 USB 设备自动休眠，避免键鼠/无线接收器出现延迟
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash usbcore.autosuspend=-1"
+
+# 修改后执行：
+#   sudo update-grub
