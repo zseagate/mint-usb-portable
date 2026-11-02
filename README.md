@@ -10,7 +10,7 @@
 - 中文 locale（`zh_CN.UTF-8`）+ fcitx5 拼音/五笔，登录即用
 - [OpenCode 2](https://opencode.ai/)（独立二进制，装在 `~/.opencode/bin`）
 - Remmina + FreeRDP 3，可远程 Windows 桌面（RDP/VNC）
-- [星火应用商店](https://www.spark-app.store/) 5.3.2
+- [星火应用商店](https://www.spark-app.store/) 5.3.2（可选，单独脚本安装）
 - exFAT 数据分区，Windows/macOS 可直接读写
 - 针对 U 盘的性能调优：禁用开机索引/更新定时器、限制日志、降低脏页、USB 调度器与自动休眠
 
