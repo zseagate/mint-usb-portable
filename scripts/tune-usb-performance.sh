@@ -87,6 +87,18 @@ done
 if [ -f /etc/default/grub.d/50_linuxmint.cfg ]; then
   sed -i "s/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR=\"Linux Mint\"/" /etc/default/grub.d/50_linuxmint.cfg
 fi
+# 8) apt 低写入：跳过 dpkg 逐文件 fsync
+cat > /etc/apt/apt.conf.d/99-usb-fast <<EOF
+DPkg::Options { "--force-unsafe-io"; };
+APT::Acquire::Languages "none";
+EOF
+chmod 644 /etc/apt/apt.conf.d/99-usb-fast
+
+# 9) ext4 减少日志提交（根分区已有 noatime 时追加 commit=30）
+if ! grep -q 'commit=30' /etc/fstab; then
+  sed -i '/[[:space:]]ext4[[:space:]]/ s#noatime,#noatime,commit=30,#' /etc/fstab
+fi
+
 update-grub
 '
 

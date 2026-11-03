@@ -1,5 +1,15 @@
 # 06 · U 盘性能优化说明
 
+## 先测盘，再谈优化
+
+软件优化不能突破 U 盘的物理写入速度。制作前先跑：
+
+```bash
+sudo DEV=/dev/sdX TARGET=/mnt/usbtest MODE=full bash scripts/usb-benchmark.sh
+```
+
+详见 [08 · U 盘性能基准](08-usb-benchmark.md)。
+
 ## 为什么 U 盘会卡
 
 普通 USB 闪存盘：
@@ -85,15 +95,26 @@ usbcore.autosuspend=-1
 
 它们会在登录后检查更新/崩溃报告，产生额外 I/O。需要时从菜单手动打开。
 
-### 7. 根分区 noatime
+### 7. 根分区 noatime + commit=30
 
 `/etc/fstab`：
 
 ```fstab
-UUID=... / ext4 defaults,noatime,errors=remount-ro 0 1
+UUID=... / ext4 defaults,noatime,commit=30,errors=remount-ro 0 1
 ```
 
-减少读文件时的元数据写入。
+减少元数据写入和 ext4 日志提交频率。
+
+### 8. apt 跳过逐文件 fsync
+
+`/etc/apt/apt.conf.d/99-usb-fast`：
+
+```text
+DPkg::Options { "--force-unsafe-io"; };
+APT::Acquire::Languages "none";
+```
+
+对慢速 U 盘能明显加快 `dpkg`；代价是断电时包数据库损坏风险更高。
 
 ## 还可以做什么
 

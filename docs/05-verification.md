@@ -1,11 +1,19 @@
 # 05 · 首次启动验收清单
 
+## 制作前
+
+- [ ] 已运行 `usb-benchmark.sh MODE=full`
+- [ ] 判定为 **GOOD / PASS**（WARN 只做轻量使用，FAIL 换盘）
+
 ## 启动
 
 - [ ] UEFI 机器：启动菜单出现 `UEFI: <U 盘名>`，可以进入 GRUB
 - [ ] Legacy 机器：启动菜单出现普通 USB 项，可以进入 GRUB
 - [ ] GRUB 菜单显示 `Linux Mint`，3 秒超时
 - [ ] 进入 LightDM 登录界面（不是黑屏）
+- [ ] 注销对话框能看到“重启/关机”
+- [ ] Greeter 的电源按钮确认框可以点击
+- [ ] 应用菜单里的“重启/关机”兜底项可用
 
 ## 中文与输入法
 

@@ -171,7 +171,7 @@ mount "${DEV}2" "$MNT/boot/efi"
 log "写入 fstab / hostname / 时区 / locale"
 cat > "$MNT/etc/fstab" <<EOF
 # /etc/fstab: static file system information.
-UUID=$ROOT_UUID  /          ext4  defaults,noatime,errors=remount-ro  0 1
+UUID=$ROOT_UUID  /          ext4  defaults,noatime,commit=30,errors=remount-ro  0 1
 UUID=$ESP_UUID   /boot/efi  vfat  umask=0077,shortname=winnt           0 2
 UUID=$SHARE_UUID /data      exfat defaults,nofail,noatime,uid=1000,gid=1000,umask=022 0 0
 EOF
@@ -271,6 +271,59 @@ if getent passwd lightdm >/dev/null 2>&1; then
   chmod 770 /var/lib/lightdm-data/lightdm
 fi
 
+# 修复 polkit 认证助手 setuid（否则电源菜单/确认框不可用）
+chmod 4755 /usr/bin/pkexec
+chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1
+if getent group messagebus >/dev/null 2>&1; then
+  chown root:messagebus /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+  chmod 4754 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+fi
+
+# 允许 sudo 组 / lightdm 执行电源操作
+mkdir -p /etc/polkit-1/rules.d
+cat > /etc/polkit-1/rules.d/49-allow-power.rules <<'EOF'
+polkit.addRule(function(action, subject) {
+    var ids = [
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.power-off-multiple-sessions",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.suspend",
+        "org.freedesktop.login1.suspend-multiple-sessions"
+    ];
+    if (ids.indexOf(action.id) !== -1 &&
+        (subject.user == "lightdm" || subject.isInGroup("sudo"))) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+chmod 644 /etc/polkit-1/rules.d/49-allow-power.rules
+
+# 桌面兜底电源入口
+cat > /usr/share/applications/mint-usb-reboot.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=重启
+Name[en]=Reboot
+Comment=Restart the system
+Exec=pkexec systemctl reboot
+Icon=system-reboot
+Terminal=false
+Categories=System;
+EOF
+cat > /usr/share/applications/mint-usb-poweroff.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=关机
+Name[en]=Power Off
+Comment=Power off the system
+Exec=pkexec systemctl poweroff
+Icon=system-shutdown
+Terminal=false
+Categories=System;
+EOF
+chmod 644 /usr/share/applications/mint-usb-*.desktop
+
 log "确保网络与 DNS 服务开机启动"
 systemctl enable NetworkManager.service >/dev/null 2>&1 || true
 systemctl enable systemd-resolved.service >/dev/null 2>&1 || true
@@ -305,13 +358,37 @@ done
 rm -rf /tmp/oc2 /tmp/opencode2.tgz
 
 log "配置 GRUB 默认项"
-sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' /etc/default/grub
+sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=10/' /etc/default/grub
 sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
+# 去掉 splash（避免 vt.handoff），关闭 i915 PSR
+sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="usbcore.autosuspend=-1 i915.enable_psr=0"/' /etc/default/grub
 if grep -q '^GRUB_DISABLE_OS_PROBER=' /etc/default/grub; then
   sed -i 's/^GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=true/' /etc/default/grub
 else
   echo 'GRUB_DISABLE_OS_PROBER=true' >> /etc/default/grub
 fi
+
+# Xorg 兼容性：禁用 Intel glamor，避免卡在 libglamoregl 初始化
+mkdir -p /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/20-modesetting-no-glamor.conf <<'EOF'
+Section "Device"
+    Identifier "Intel modesetting (no glamor)"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+EndSection
+EOF
+# 显示器接 Intel 时，黑名单 nouveau
+cat > /etc/modprobe.d/blacklist-nouveau.conf <<'EOF'
+blacklist nouveau
+options nouveau modeset=0
+EOF
+
+# apt 低写入优化（U 盘慢盘）
+cat > /etc/apt/apt.conf.d/99-usb-fast <<'EOF'
+DPkg::Options { "--force-unsafe-io"; };
+APT::Acquire::Languages "none";
+EOF
+chmod 644 /etc/apt/apt.conf.d/99-usb-fast
 
 log "重建 initramfs"
 update-initramfs -u -k all
@@ -404,6 +481,18 @@ done
 if [[ -f /etc/default/grub.d/50_linuxmint.cfg ]]; then
   sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Linux Mint"/' /etc/default/grub.d/50_linuxmint.cfg
 fi
+
+# 安全启动项：nomodeset 兜底（普通项仍黑屏时选它）
+cat > /etc/grub.d/40_custom <<EOF
+#!/bin/sh
+exec tail -n +3 \$0
+menuentry "Linux Mint (safe graphics, nomodeset)" {
+    search --no-floppy --fs-uuid --set=root $ROOT_UUID
+    linux /boot/vmlinuz-6.14.0-37-generic root=UUID=$ROOT_UUID ro nomodeset
+    initrd /boot/initrd.img-6.14.0-37-generic
+}
+EOF
+chmod 755 /etc/grub.d/40_custom
 
 log "生成 GRUB 菜单"
 update-grub

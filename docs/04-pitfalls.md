@@ -360,4 +360,147 @@ DOMAIN\username
 - askpass 脚本：`~/.local/bin/`
 - 日志：项目目录
 
+## 坑 11：第二次黑屏——Xorg 卡在 glamor
+
+第一次黑屏修好 LightDM 后，重启又能进桌面。但换盘/再次启动后，又黑屏。
+
+### 日志
+
+`/var/log/Xorg.0.log` 停在：
+
+```text
+(II) Loading /usr/lib/xorg/modules/libglamoregl.so
+(II) Module glamoregl: vendor="X.Org Foundation"
+```
+
+后面没有 `glamor X acceleration enabled`，LightDM 一直等不到 X server ready。内核命令行还多了 `vt.handoff=7`（由 `splash` 触发）。
+
+### 修复
+
+```bash
+# 1) 禁用 Intel glamor
+sudo tee /etc/X11/xorg.conf.d/20-modesetting-no-glamor.conf >/dev/null <<'EOF'
+Section "Device"
+    Identifier "Intel modesetting (no glamor)"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+EndSection
+EOF
+
+# 2) 黑名单 nouveau（显示器接 Intel 时）
+sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null <<'EOF'
+blacklist nouveau
+options nouveau modeset=0
+EOF
+
+# 3) 去掉 splash，关闭 i915 PSR
+sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="usbcore.autosuspend=-1 i915.enable_psr=0"/' /etc/default/grub
+
+sudo update-initramfs -u -k all
+sudo update-grub
+```
+
+同时加一个 `nomodeset` 的 GRUB 安全启动项，作为兜底。GRUB 等待时间改成 10 秒。
+
+如果普通项仍黑屏，选 **`Linux Mint (safe graphics, nomodeset)`**。
+
+---
+
+## 坑 12：电源菜单只有注销，确认框点不动
+
+### 日志
+
+`~/.xsession-errors` 反复出现：
+
+```text
+polkit-agent-helper-1: needs to be setuid root
+```
+
+### 根因
+
+镜像里的两个关键文件丢了 setuid 位：
+
+```text
+/usr/bin/pkexec
+/usr/lib/polkit-1/polkit-agent-helper-1
+```
+
+导致 polkit 认证失败：Xfce 退出对话框里的重启/关机不可用，greeter 的确认框也点不动。
+
+### 修复
+
+```bash
+sudo chmod 4755 /usr/bin/pkexec
+sudo chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1
+
+# 可选：修正 dbus helper
+sudo chown root:messagebus /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+sudo chmod 4754 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+```
+
+再加一条 polkit 规则，允许 `sudo` 组和 `lightdm` 执行电源操作：
+
+```bash
+sudo tee /etc/polkit-1/rules.d/49-allow-power.rules >/dev/null <<'EOF'
+polkit.addRule(function(action, subject) {
+    var ids = [
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.power-off-multiple-sessions",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.suspend",
+        "org.freedesktop.login1.suspend-multiple-sessions"
+    ];
+    if (ids.indexOf(action.id) !== -1 &&
+        (subject.user == "lightdm" || subject.isInGroup("sudo"))) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+```
+
+兜底：在 `/usr/share/applications/` 加“重启/关机”桌面项，`Exec=pkexec systemctl reboot` / `pkexec systemctl poweroff`。
+
+---
+
+## 坑 13：`apt upgrade` 极慢——U 盘写入是硬瓶颈
+
+### 实测
+
+| 盘 | 顺序写 | 4K 随机写 QD1 | fsync | 顺序读 | 判定 |
+|---|---:|---:|---:|---:|---|
+| ASolid 128GB | 1.87 MB/s | 0.27 MB/s | 0.13 MB/s | 200 MB/s | FAIL |
+| Kingston DataTraveler 3.0 115.5GB | 9.99 MB/s | 0.81 MB/s | 0.58 MB/s | 53.7 MB/s | FAIL |
+
+两盘都是 **BOT + write through**，`hdparm -W1` 也打不开写缓存。
+
+### 结论
+
+`apt` 慢不是系统配置问题，是 U 盘 4K 随机写太低。软件优化只能减轻，不能解决：
+
+```bash
+# 跳过 dpkg 逐文件 fsync（用断电安全性换速度）
+sudo tee /etc/apt/apt.conf.d/99-usb-fast >/dev/null <<'EOF'
+DPkg::Options { "--force-unsafe-io"; };
+APT::Acquire::Languages "none";
+EOF
+
+# 减少 ext4 日志提交
+# /etc/fstab 根分区加 commit=30
+```
+
+### 正确做法
+
+**制作前先跑基准**：
+
+```bash
+sudo DEV=/dev/sdX TARGET=/mnt/usbtest MODE=full bash scripts/usb-benchmark.sh
+```
+
+- GOOD / PASS：继续
+- WARN：只做轻量使用
+- FAIL：换 USB SSD / 高端 U 盘
+
+详见 [08 · U 盘性能基准](08-usb-benchmark.md)。
+
 下一篇：[05 · 验收清单](05-verification.md)
