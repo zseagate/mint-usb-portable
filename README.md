@@ -28,16 +28,11 @@
 │   ├── 04-pitfalls.md          # 踩坑记录（黑屏/DNS/卡顿/星火依赖…）
 │   ├── 05-verification.md      # 首次启动验收清单
 │   ├── 06-performance.md       # U 盘性能优化说明
-│   ├── 07-faq.md               # 常见问题
-│   ├── 08-usb-benchmark.md     # 制作前 U 盘性能基准与判定标准
-│   └── reports/                # 实测基准报告
+│   └── 07-faq.md               # 常见问题
 ├── scripts/
 │   ├── install-mint-usb.sh     # 主安装脚本（分区 + chroot + GRUB + 优化）
 │   ├── install-spark-store.sh  # 安装星火应用商店
-│   ├── tune-usb-performance.sh # 对已装好的 U 盘重新应用性能优化
-│   └── usb-benchmark.sh        # 制作前 U 盘读写基准
-├── .opencode/skills/
-│   └── usb-benchmark/          # OpenCode 技能：U 盘基准
+│   └── tune-usb-performance.sh # 对已装好的 U 盘重新应用性能优化
 └── configs/
     ├── 99-usb-journald.conf
     ├── 99-usb-performance.conf
@@ -49,8 +44,11 @@
 
 ### 0. 先测 U 盘（强烈建议）
 
+性能基准已经拆到独立仓库：**[zseagate/usb-bench](https://github.com/zseagate/usb-bench)**。
+
 ```bash
-sudo DEV=/dev/sdb TARGET=/mnt/usbtest MODE=full bash scripts/usb-benchmark.sh
+git clone https://github.com/zseagate/usb-bench.git
+sudo python3 usb-bench/scripts/usb_bench.py --device /dev/sdb --automount --full --yes
 ```
 
 判定：
@@ -59,7 +57,7 @@ sudo DEV=/dev/sdb TARGET=/mnt/usbtest MODE=full bash scripts/usb-benchmark.sh
 - **WARN**：只做轻量使用
 - **FAIL**：换盘，不要浪费一小时装系统
 
-详见 [docs/08-usb-benchmark.md](docs/08-usb-benchmark.md)。
+详见 [usb-bench README](https://github.com/zseagate/usb-bench)。
 
 ### 1. 准备文件
 
@@ -133,7 +131,7 @@ sudo DEV=/dev/sdb bash scripts/tune-usb-performance.sh
 | 电源菜单只有注销/确认框点不动 | `polkit-agent-helper-1` 和 `pkexec` 没有 setuid | `chmod 4755` 两个文件 + polkit 电源规则 |
 | chroot 里 apt 无法解析域名 | 宿主机用 systemd-resolved，chroot 里写了公网 DNS 但网络策略不允许 | chroot 的 `/etc/resolv.conf` 用 `nameserver 127.0.0.53` |
 | 键鼠卡顿 | `apt-daily` / `plocate` 定时器在开机后立即运行，持续抢 U 盘 I/O | 禁用定时器 + 限制日志 + 调脏页 + USB 调度器/自动休眠 |
-| `apt upgrade` 极慢 | U 盘 4K 随机写太低（实测 0.27–0.83 MB/s） | 先跑 `usb-benchmark.sh`；FAIL 就换 USB SSD |
+| `apt upgrade` 极慢 | U 盘 4K 随机写太低（实测 0.27–0.83 MB/s） | 先跑 [usb-bench](https://github.com/zseagate/usb-bench)；FAIL 就换 USB SSD |
 | 星火商店装不上 | `spark-store` 已解包，但 `aria2 → libaria2-0 → libcares2` 依赖链断了 | `apt-get update && apt-get -f install -y` |
 | GRUB 菜单显示 Ubuntu | 定制 ISO 的 `50_linuxmint.cfg` 写死 `GRUB_DISTRIBUTOR="Ubuntu"` | 改成 `Linux Mint` 后 `update-grub` |
 | `wipefs: 设备或资源忙` | udisks2/FUSE 还挂着旧分区 | `umount -R` / `umount -l`，确认无挂载后再写 |

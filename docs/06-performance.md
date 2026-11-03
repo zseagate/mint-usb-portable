@@ -2,13 +2,14 @@
 
 ## 先测盘，再谈优化
 
-软件优化不能突破 U 盘的物理写入速度。制作前先跑：
+软件优化不能突破 U 盘的物理写入速度。制作前先用独立仓库 [usb-bench](https://github.com/zseagate/usb-bench) 测试：
 
 ```bash
-sudo DEV=/dev/sdX TARGET=/mnt/usbtest MODE=full bash scripts/usb-benchmark.sh
+git clone https://github.com/zseagate/usb-bench.git
+sudo python3 usb-bench/scripts/usb_bench.py --device /dev/sdX --automount --full --yes
 ```
 
-详见 [08 · U 盘性能基准](08-usb-benchmark.md)。
+详见 [usb-bench](https://github.com/zseagate/usb-bench)。
 
 ## 为什么 U 盘会卡
 

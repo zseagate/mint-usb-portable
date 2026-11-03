@@ -24,6 +24,3 @@ spark-store_*
 Thumbs.db
 *.swp
 *~
-
-# 根目录临时生成的基准报告
-/usb-benchmark-*.md

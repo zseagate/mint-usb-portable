@@ -491,16 +491,17 @@ EOF
 
 ### 正确做法
 
-**制作前先跑基准**：
+**制作前先跑基准**：独立仓库 [usb-bench](https://github.com/zseagate/usb-bench)。
 
 ```bash
-sudo DEV=/dev/sdX TARGET=/mnt/usbtest MODE=full bash scripts/usb-benchmark.sh
+git clone https://github.com/zseagate/usb-bench.git
+sudo python3 usb-bench/scripts/usb_bench.py --device /dev/sdX --automount --full --yes
 ```
 
 - GOOD / PASS：继续
 - WARN：只做轻量使用
 - FAIL：换 USB SSD / 高端 U 盘
 
-详见 [08 · U 盘性能基准](08-usb-benchmark.md)。
+详见 [usb-bench](https://github.com/zseagate/usb-bench)。
 
 下一篇：[05 · 验收清单](05-verification.md)

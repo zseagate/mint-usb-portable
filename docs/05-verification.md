@@ -2,8 +2,7 @@
 
 ## 制作前
 
-- [ ] 已运行 `usb-benchmark.sh MODE=full`
-- [ ] 判定为 **GOOD / PASS**（WARN 只做轻量使用，FAIL 换盘）
+- [ ] 已用 [usb-bench](https://github.com/zseagate/usb-bench) 跑过 full，并判定为 **GOOD / PASS**（WARN 只做轻量使用，FAIL 换盘）
 
 ## 启动
 
